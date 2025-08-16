@@ -4,92 +4,264 @@
   <meta charset="UTF-8">
   <title>Multi-Backend Pinger</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --primary: #4f8cff;
+      --secondary: #a9c9ff;
+      --success: #36d399;
+      --danger: #ff6565;
+      --bg: #f7f9fc;
+      --card-bg: #fff;
+      --text: #23272f;
+      --muted: #7a869a;
+      --radius: 20px;
+      --shadow: 0 6px 24px rgba(79, 140, 255, 0.08);
+    }
     body {
-      font-family: sans-serif;
-      background: #f6f8fa;
-      color: #222;
-      text-align: center;
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
       margin: 0;
-      padding: 2rem;
+      min-height: 100vh;
+      padding: 0;
+    }
+    .container {
+      max-width: 540px;
+      margin: 60px auto 0 auto;
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 2.5rem 2rem 2rem 2rem;
+    }
+    h1 {
+      font-weight: 600;
+      color: var(--primary);
+      margin: 0 0 1rem 0;
+      letter-spacing: -1px;
+    }
+    .desc {
+      color: var(--muted);
+      margin-bottom: 2rem;
+      font-size: 1.07rem;
+    }
+    .timer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.6rem;
+      font-size: 1.2rem;
+      font-weight: 600;
+      background: var(--secondary);
+      color: var(--text);
+      border-radius: var(--radius);
+      height: 48px;
+      width: 100%;
+      box-sizing: border-box;
+      letter-spacing: 0.5px;
     }
     .status-list {
-      margin: 2rem auto;
-      max-width: 400px;
-      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
     }
     .status-item {
-      margin: 1rem 0;
-      padding: 1rem;
-      background: #fff;
-      border-radius: 6px;
-      box-shadow: 0 2px 6px #0001;
-      font-size: 1rem;
+      background: var(--bg);
+      border-radius: var(--radius);
+      box-shadow: 0 2px 12px #4f8cff11;
+      padding: 1.2rem 1rem;
+      transition: box-shadow 0.2s;
+      border: 1px solid #edf2fa;
     }
-    .success { color: green; }
-    .fail { color: red; }
-    .url {
-      font-size: 0.95em;
-      color: #555;
+    .status-item.success {
+      border-left: 7px solid var(--success);
+    }
+    .status-item.fail {
+      border-left: 7px solid var(--danger);
+    }
+    .status-item.waiting {
+      border-left: 7px solid var(--secondary);
+    }
+    .url-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.6rem;
+    }
+    .backend-url {
+      font-weight: 600;
+      background: var(--secondary);
+      padding: 0.25rem 0.8rem;
+      border-radius: 12px;
+      color: var(--primary);
+      font-size: 0.99em;
+      word-break: break-all;
+      letter-spacing: 0.1px;
+    }
+    .last-ping {
+      font-size: 0.97em;
+      color: var(--muted);
+      margin-bottom: 0.6rem;
+    }
+    .message {
+      font-size: 1.03em;
+      padding: 0.7rem 1rem;
+      background: #e8f0fe;
+      border-radius: 12px;
+      margin-bottom: 0.6rem;
+      color: #2663b2;
+      word-break: break-word;
+      transition: background 0.2s;
+    }
+    .status {
+      font-weight: 600;
+      font-size: 1.04em;
+      display: inline-block;
+      padding: 0.3rem 0.8rem;
+      border-radius: 12px;
+      color: #fff;
+      background: var(--muted);
+      margin-bottom: 0.3rem;
+    }
+    .status.success {
+      background: var(--success);
+    }
+    .status.fail {
+      background: var(--danger);
+    }
+    .status.waiting {
+      background: var(--secondary);
+    }
+    @media (max-width: 600px) {
+      .container {
+        max-width: 98vw;
+        margin: 20px 1vw 0 1vw;
+        padding: 1.2rem 0.3rem 1.2rem 0.3rem;
+      }
+      .timer {
+        font-size: 1rem;
+        height: 40px;
+      }
+      .status-item {
+        padding: 0.8rem 0.5rem;
+      }
     }
   </style>
 </head>
 <body>
-  <h1>Multi-Backend Pinger</h1>
-  <p>This page pings your backend(s) every 1 minute to keep them awake.</p>
-  <div class="status-list" id="status-list">
-    <!-- Status messages appear here -->
+  <div class="container">
+    <h1>Multi-Backend Pinger</h1>
+    <div class="desc">
+      This page pings your backend(s) every minute to keep them awake.<br>
+      Status, last ping, and backend messages are shown below.<br>
+    </div>
+    <div class="timer" id="timer">
+      Next ping in <span id="timer-seconds">60</span> seconds
+    </div>
+    <div class="status-list" id="status-list">
+      <!-- Backend status cards go here -->
+    </div>
   </div>
   <script>
-    // === CHANGE THESE URLs TO YOUR BACKEND ENDPOINTS ===
+    // === Add your backend endpoints here ===
     const BACKEND_URLS = [
       "https://pcapptrackerback.onrender.com/",
       "https://newggback.onrender.com/",
       "https://mbtback.onrender.com/",
-      // Add more as needed
+      // Add more URLs as needed
     ];
 
-    const statusList = document.getElementById('status-list');
+    // Ping interval in seconds
+    const PING_INTERVAL = 60;
+
+    // State for each backend status
     let statuses = BACKEND_URLS.map(url => ({
       url,
       lastPing: 'Waiting to ping...',
-      status: 'waiting'
+      status: 'waiting',
+      message: '',
+      lastTime: null,
     }));
 
+    // Timer state
+    let secondsLeft = PING_INTERVAL;
+
+    // DOM Elements
+    const timerText = document.getElementById('timer-seconds');
+    const statusList = document.getElementById('status-list');
+
+    // Render the status cards
     function updateStatusList() {
-      statusList.innerHTML = statuses.map(s => `
-        <div class="status-item">
-          <div class="url">${s.url}</div>
-          <div class="${s.status === 'success' ? 'success' : (s.status === 'fail' ? 'fail' : '')}">
-            ${s.lastPing}
+      statusList.innerHTML = statuses.map((s, i) => `
+        <div class="status-item ${s.status}">
+          <div class="url-row">
+            <span class="backend-url">${s.url}</span>
           </div>
+          <div class="last-ping">Last ping: ${s.lastPing}</div>
+          <div class="status ${s.status}">
+            ${s.status === 'success' ? 'Success' :
+              s.status === 'fail' ? 'Failed' :
+              'Waiting'}
+          </div>
+          ${s.message ? `<div class="message">${s.message}</div>` : ''}
         </div>
       `).join('');
     }
 
+    // Ping all backends
     function pingAllBackends() {
       statuses.forEach((s, i) => {
-        fetch(s.url, {mode: 'no-cors'})
-          .then(() => {
-            const now = new Date().toLocaleTimeString();
-            statuses[i].lastPing = `Pinged at ${now}`;
-            statuses[i].status = 'success';
+        fetch(s.url)
+          .then(async (resp) => {
+            statuses[i].status = resp.ok ? 'success' : 'fail';
+            statuses[i].lastTime = new Date();
+            statuses[i].lastPing = `Pinged at ${statuses[i].lastTime.toLocaleTimeString()}`;
+            // Try to parse JSON, else get text
+            try {
+              let msg = '';
+              const contentType = resp.headers.get("content-type") || "";
+              if (contentType.includes("application/json")) {
+                const data = await resp.json();
+                msg = typeof data === "object" ? JSON.stringify(data, null, 2) : String(data);
+              } else {
+                msg = await resp.text();
+              }
+              statuses[i].message = msg ? msg : '';
+            } catch (e) {
+              statuses[i].message = '';
+            }
             updateStatusList();
           })
-          .catch(() => {
-            const now = new Date().toLocaleTimeString();
-            statuses[i].lastPing = `Failed to ping at ${now}`;
+          .catch(async (err) => {
             statuses[i].status = 'fail';
+            statuses[i].lastTime = new Date();
+            statuses[i].lastPing = `Failed at ${statuses[i].lastTime.toLocaleTimeString()}`;
+            statuses[i].message = String(err.message || 'Ping failed');
             updateStatusList();
           });
       });
     }
 
-    // Initial render
+    // Timer logic
+    function startTimer() {
+      timerText.textContent = secondsLeft;
+      const timerInterval = setInterval(() => {
+        secondsLeft--;
+        timerText.textContent = secondsLeft;
+        if (secondsLeft <= 0) {
+          secondsLeft = PING_INTERVAL;
+          pingAllBackends();
+        }
+      }, 1000);
+    }
+
+    // Initial UI render
     updateStatusList();
-    // Ping immediately, then every 60 seconds
     pingAllBackends();
-    setInterval(pingAllBackends, 60 * 1000);
+    startTimer();
+
   </script>
 </body>
 </html>
