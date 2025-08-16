@@ -10,15 +10,22 @@
   <style>
     :root {
       --primary: #4f8cff;
-      --secondary: #a9c9ff;
+      --secondary: #ff8519;
       --success: #36d399;
       --danger: #ff6565;
-      --bg: #f7f9fc;
-      --card-bg: #fff;
+      --bg: #1e1e1e;
+      --card-bg: #181818;
       --text: #23272f;
       --muted: #7a869a;
       --radius: 20px;
       --shadow: 0 6px 24px rgba(79, 140, 255, 0.08);
+      --button-bg: #4f8cff;
+      --button-hover: #2663b2;
+      --button-text: #fff;
+      --button-radius: 16px;
+      --button-shadow: 0 2px 8px #4f8cff33;
+      --button-disabled-bg: #a9c9ff;
+      --button-disabled-text: #f7f9fc;
     }
     body {
       font-family: 'Inter', sans-serif;
@@ -47,11 +54,18 @@
       margin-bottom: 2rem;
       font-size: 1.07rem;
     }
+    .timer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.6rem;
+    }
     .timer {
+      flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 1.6rem;
       font-size: 1.2rem;
       font-weight: 600;
       background: var(--secondary);
@@ -61,6 +75,30 @@
       width: 100%;
       box-sizing: border-box;
       letter-spacing: 0.5px;
+    }
+    .ping-btn {
+      padding: 0.9rem 2rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+      border-radius: var(--button-radius);
+      background: var(--button-bg);
+      color: var(--button-text);
+      border: none;
+      box-shadow: var(--button-shadow);
+      cursor: pointer;
+      transition: background 0.15s, box-shadow 0.15s;
+      margin-left: 1rem;
+      outline: none;
+    }
+    .ping-btn:hover:not(:disabled) {
+      background: var(--button-hover);
+      box-shadow: 0 4px 16px #2663b233;
+    }
+    .ping-btn:disabled {
+      background: var(--button-disabled-bg);
+      color: var(--button-disabled-text);
+      cursor: not-allowed;
+      opacity: 0.65;
     }
     .status-list {
       display: flex;
@@ -74,6 +112,7 @@
       padding: 1.2rem 1rem;
       transition: box-shadow 0.2s;
       border: 1px solid #edf2fa;
+      /* the left border is set by status below */
     }
     .status-item.success {
       border-left: 7px solid var(--success);
@@ -140,12 +179,20 @@
         margin: 20px 1vw 0 1vw;
         padding: 1.2rem 0.3rem 1.2rem 0.3rem;
       }
+      .timer-row {
+        flex-direction: column;
+        gap: 0.8rem;
+      }
       .timer {
         font-size: 1rem;
         height: 40px;
       }
       .status-item {
         padding: 0.8rem 0.5rem;
+      }
+      .ping-btn {
+        width: 100%;
+        margin-left: 0;
       }
     }
   </style>
@@ -157,8 +204,13 @@
       This page pings your backend(s) every minute to keep them awake.<br>
       Status, last ping, and backend messages are shown below.<br>
     </div>
-    <div class="timer" id="timer">
-      Next ping in <span id="timer-seconds">60</span> seconds
+    <div class="timer-row">
+      <div class="timer" id="timer">
+        Next ping in <span id="timer-seconds">60</span> seconds
+      </div>
+      <button class="ping-btn" id="manual-ping-btn" title="Ping all backends now">
+        Ping Now
+      </button>
     </div>
     <div class="status-list" id="status-list">
       <!-- Backend status cards go here -->
@@ -187,10 +239,14 @@
 
     // Timer state
     let secondsLeft = PING_INTERVAL;
+    let timerIntervalId = null;
+    let isPinging = false;
 
     // DOM Elements
     const timerText = document.getElementById('timer-seconds');
+    const timerDiv = document.getElementById('timer');
     const statusList = document.getElementById('status-list');
+    const manualPingBtn = document.getElementById('manual-ping-btn');
 
     // Render the status cards
     function updateStatusList() {
@@ -210,10 +266,12 @@
       `).join('');
     }
 
-    // Ping all backends
+    // Ping all backends (returns Promise)
     function pingAllBackends() {
-      statuses.forEach((s, i) => {
-        fetch(s.url)
+      isPinging = true;
+      manualPingBtn.disabled = true;
+      let pingPromises = statuses.map((s, i) => {
+        return fetch(s.url)
           .then(async (resp) => {
             statuses[i].status = resp.ok ? 'success' : 'fail';
             statuses[i].lastTime = new Date();
@@ -232,22 +290,28 @@
             } catch (e) {
               statuses[i].message = '';
             }
-            updateStatusList();
           })
-          .catch(async (err) => {
+          .catch((err) => {
             statuses[i].status = 'fail';
             statuses[i].lastTime = new Date();
             statuses[i].lastPing = `Failed at ${statuses[i].lastTime.toLocaleTimeString()}`;
             statuses[i].message = String(err.message || 'Ping failed');
-            updateStatusList();
           });
+      });
+      // Always update after all promises finish
+      return Promise.all(pingPromises).then(() => {
+        updateStatusList();
+        isPinging = false;
+        manualPingBtn.disabled = false;
       });
     }
 
     // Timer logic
     function startTimer() {
       timerText.textContent = secondsLeft;
-      const timerInterval = setInterval(() => {
+      if (timerIntervalId) clearInterval(timerIntervalId);
+      timerIntervalId = setInterval(() => {
+        if (isPinging) return; // Don't update timer during ping
         secondsLeft--;
         timerText.textContent = secondsLeft;
         if (secondsLeft <= 0) {
@@ -257,10 +321,23 @@
       }, 1000);
     }
 
+    // Manual ping button click
+    manualPingBtn.addEventListener('click', async function() {
+      if (isPinging) return;
+      // Immediately ping, then reset timer after ping finishes
+      manualPingBtn.disabled = true;
+      timerDiv.textContent = "Pinging...";
+      await pingAllBackends();
+      secondsLeft = PING_INTERVAL;
+      timerDiv.innerHTML = `Next ping in <span id="timer-seconds">${secondsLeft}</span> seconds`;
+      timerText.textContent = secondsLeft;
+    });
+
     // Initial UI render
     updateStatusList();
-    pingAllBackends();
-    startTimer();
+    pingAllBackends().then(() => {
+      startTimer();
+    });
 
   </script>
 </body>
